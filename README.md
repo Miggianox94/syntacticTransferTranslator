@@ -1,0 +1,2 @@
+# syntacticTransferTranslator
+Toy syntactic transfer translator implementation
