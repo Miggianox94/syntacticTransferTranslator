@@ -61,35 +61,41 @@ public enum DependencyMapping {
 	 * @param governor
 	 * @param dependencies
 	 */
-    public static void setSimpleNlgPos(SPhraseSpec sentence, int mainRootIndex, int governor, List<Dependency> dependencies){
+    public static void setSimpleNlgPos(SPhraseSpec sentence,int governor, List<Dependency> dependencies){
     	
     	for(Dependency dep : dependencies){
     		if(dep.getDep().equals("cop")){
     			String value = Executor.itaToEnDict.get(dep.getDependentGloss());
     			sentence.setVerb(value);
+    			//It is your father's laser sword.
     			sentence.setSubject("It");
     		}else if(dep.getDep().equals("det:poss")){
     			
 				NPPhraseSpec subjNP = Executor.nlgFactory.createNounPhrase();
-				subjNP = findSpecifier(dep.getGovernor(),subjNP,dependencies,dep.getGovernor());
+				//trovo il soggetto e i suoi modificatori esplorando l'albero a dipendenze
+				subjNP = findNounAndMod(dep.getGovernor(),subjNP,dependencies,dep.getGovernor());
+				
+				//creo possessive phrase
 				NLGElement word = Executor.nlgFactory.createInflectedWord(Executor.itaToEnDict.get(dep.getDependentGloss())+" "+Executor.itaToEnDict.get(dep.getGovernorGloss()), LexicalCategory.NOUN);
 				word.setFeature(LexicalFeature.PROPER, true);
 				NPPhraseSpec possNP = Executor.nlgFactory.createNounPhrase(word);
 				possNP.setFeature(Feature.POSSESSIVE, true);
+				
 				subjNP.setSpecifier(possNP);
 				
-				System.out.println("Setting subj: "+subjNP);
+				System.out.println("Setting complement: "+subjNP);
 				sentence.setComplement(subjNP);
     		}else if(dep.getDep().equals("aux")){
     			boolean auxpass = false;
     			for(Dependency dep2:dependencies){
     				if(dep2.getGovernor() == dep.getGovernor() && dep2.getDep().equals("auxpass")){
+    					//NOTA: è per la parte di frase "sono stati spazzati via"
     					auxpass = true;
     	    			VPPhraseSpec verbPhrase = Executor.nlgFactory.createVerbPhrase();
     	    			verbPhrase.setVerb(Executor.itaToEnDict.get(dep.getGovernorGloss()));
     	    			for(Dependency dep3:dependencies){
     	    				if(dep3.getGovernor() == dep.getGovernor() && dep3.getDep().equals("advmod")){
-    	    					verbPhrase.setPostModifier(Executor.itaToEnDict.get(dep2.getDependentGloss()));
+    	    					verbPhrase.setPostModifier(Executor.itaToEnDict.get(dep3.getDependentGloss()));
     	    					break;
     	    				}
     	    			}
@@ -106,7 +112,9 @@ public enum DependencyMapping {
         			System.out.println("Setting verbphrase: "+verbPhrase);
         			sentence.setVerb(verbPhrase);
         			sentence.setFeature(Feature.TENSE, Tense.PAST);
-        			sentence.setSubject("He");    				
+        			
+        			//va bene solo perchè il requisito è di farlo funzionare su quelle 3 frasi
+        			sentence.setSubject("He");     				
     			}
 
     		}else if(dep.getDep().equals("det") && dep.getGovernor() != governor){
@@ -116,11 +124,9 @@ public enum DependencyMapping {
     			boolean nmodFound = false;
     			for(Dependency dep2:dependencies){
     				if(dep2.getGovernor() == dep.getGovernor()){
-    					//dep2 and dep are brothers
-    					if(dep2.getDep().equals("amod")){
-    						complementPhrase.setPreModifier(Executor.itaToEnDict.get(dep2.getDependentGloss()));
-    					}
+
     					if(dep2.getDep().equals("nmod")){
+    						//questa regola ad esempio modella la parte di frase "Republic's scraps"
     						nmodFound = true;
     						NPPhraseSpec subjNP = Executor.nlgFactory.createNounPhrase();
     						subjNP.setNoun(Executor.itaToEnDict.get(dep2.getGovernorGloss()));
@@ -134,11 +140,25 @@ public enum DependencyMapping {
     							if(dep3.getGovernor() == dep2.getDependent() && dep3.getDep().equals("amod")){
     								possNP.setPreModifier(Executor.itaToEnDict.get(dep3.getDependentGloss()));
 
+    							}else if(dep3.getGovernor() == dep2.getGovernor() && dep3.getDep().equals("amod")){
+    								//ultimi
+    								subjNP.setPreModifier(Executor.itaToEnDict.get(dep3.getDependentGloss()));
+    								break;
     							}
     						}
     						subjNP.setSpecifier(possNP);
     						
     						complementPhrase.setComplement(subjNP);
+    					}
+    					//dep2 and dep are brothers --> ad esempio la parte "loyal move."
+    					else if(dep2.getDep().equals("amod")){
+    						//if governor.governor.dep == dobj (because if not it match also for last Republic)
+    						for(Dependency dep3:dependencies){
+    							if(dep3.getDependent() == dep2.getGovernor() && dep3.getDep().equals("dobj")){
+    								complementPhrase.setPreModifier(Executor.itaToEnDict.get(dep2.getDependentGloss()));
+    								break;
+    							}
+    						}
     					}
     				}
     			}
@@ -155,7 +175,16 @@ public enum DependencyMapping {
     	}
     }
     
-    private static NPPhraseSpec findSpecifier(int governorIndex, NPPhraseSpec constructed, List<Dependency> dependencies, int firstGov){
+    /**
+     * It finds the subject and his modifer
+     * @param governorIndex
+     * @param constructed
+     * @param dependencies
+     * @param firstGov
+     * @return
+     */
+    private static NPPhraseSpec findNounAndMod(int governorIndex, NPPhraseSpec constructed, List<Dependency> dependencies, int firstGov){
+    	//if I am on the root I found the subj
     	if(governorIndex == 0){
     		for(Dependency dp : dependencies){
         		if(dp.getGovernor() == 0){
@@ -169,13 +198,13 @@ public enum DependencyMapping {
     	
     	for(Dependency dp : dependencies){
     		if(dp.getDependent() == governorIndex){
-    			NPPhraseSpec constructedPartial = findSpecifier(dp.getGovernor(),constructed,dependencies,firstGov);
+    			NPPhraseSpec constructedPartial = findNounAndMod(dp.getGovernor(),constructed,dependencies,firstGov);
     			
     			if(governorIndex == firstGov || dp.getGovernor() == 0){
     				return constructedPartial;
     			}
+    			//in this case I found a modifier
     			System.out.println("Adding modifier: "+dp.getDependentGloss());
-    			//I assume that this will be a modifier
     			constructedPartial.addPreModifier(Executor.itaToEnDict.get(dp.getDependentGloss()));
     			return constructedPartial;
     		}

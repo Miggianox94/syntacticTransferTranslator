@@ -157,7 +157,7 @@ public class Executor {
 	 * ref: https://nlp.stanford.edu/software/dependencies_manual.pdf
 	 * It only covers a subset of the basic-dependencies types of Stanford NLP (the required ones from the required sentences)
 	 * It maps to the SimpleNLG types: https://github.com/simplenlg/simplenlg/wiki/Section-III-%E2%80%93-Getting-started
-	 * @param annotatedPhrase
+	 * @param dependencies
 	 * @return
 	 */
 	private static SPhraseSpec translationAndannotationToSPhraseSpec(List<Dependency> dependencies){
@@ -185,13 +185,8 @@ public class Executor {
 		 */
 		SPhraseSpec sentence = nlgFactory.createClause();
 
-		int mainRootIndex = -1;
-		for(Dependency dep : dependencies){
-			if(dep.getGovernor() == 0){
-				mainRootIndex = dep.getDependent();
-			}
-		}
 		
+		//governorIndex conterrà l'index del dependent della root
 		int governorIndex = -1;
 		for(Dependency dep : dependencies){
 			if(dep.getGovernor() == 0){
@@ -208,18 +203,24 @@ public class Executor {
 				if(o1.getGovernor() == 0 || !isLeaf(o1,dependenciesFinal)){
 					return 1;
 				}else{
-					return -1;
+					return -1;//le foglie vengono dopo nell'ordinamento
 				}
 			}	
 		});
 		
-		DependencyMapping.setSimpleNlgPos(sentence,mainRootIndex,governorIndexFinal,dependencies);
+		DependencyMapping.setSimpleNlgPos(sentence,governorIndexFinal,dependencies);
 		
 		
 		
 		return sentence;
 	}
 	
+	/**
+	 * return true if not exist a dependency dep where dep.getGovernor() == a.getDependent()
+	 * @param a
+	 * @param dependencies
+	 * @return
+	 */
 	private static boolean isLeaf(Dependency a,List<Dependency> dependencies){
 		for(Dependency dep:dependencies){
 			if(dep.getGovernor() == a.getDependent()){
